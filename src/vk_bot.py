@@ -53,18 +53,17 @@ def main():
     chatgpt_wrapper = ChatGPTWrapper()
 
     logger.info("Start listening server")
-    for event in vk_longpoll.listen():
+    while True:
         try:
-            if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
-                response = handle_message(event.text, _VK_USERS_PREFIX + str(event.user_id), chatgpt_wrapper)
-                vk_api.messages.send(user_id=event.user_id, message=response, random_id=get_random_id())
+            for event in vk_longpoll.listen():
+                if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
+                    response = handle_message(event.text, _VK_USERS_PREFIX + str(event.user_id), chatgpt_wrapper)
+                    vk_api.messages.send(user_id=event.user_id, message=response, random_id=get_random_id())
         except KeyboardInterrupt:
             logger.info(f"Keyboard interrupt received, stop listening server")
             exit()
         except ApiError:
             logger.info(f"Strange API error occurred, ignore it")
-        except TimeoutError:
-            logger.info("Timeout error occurred, probably VK isn't available")
         except Exception as e:
             logger.error(e)
 
