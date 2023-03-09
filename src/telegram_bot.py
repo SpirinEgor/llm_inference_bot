@@ -35,7 +35,10 @@ def validate_user(user_id: int) -> bool:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command `/start` is issued."""
     user = update.message.from_user
-    await update.message.reply_text(f"Hi, {user.username} ({user.id})! The bot is in closed beta testing, stay tuned 🤙")
+    await update.message.reply_text(
+        f"Hi, {user.username} ({user.id})! The bot is in closed beta testing, stay tuned 🤙\n"
+        "You can try to negotiate with the admin to add to the white list..."
+    )
 
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
