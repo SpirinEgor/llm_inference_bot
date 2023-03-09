@@ -20,3 +20,18 @@ python -m src.vk_bot
 ```
 
 Use `/help` to see the list of available commands.
+
+## Telegram bot
+
+Telegram bot only works in [inline mode](https://telegram.org/blog/inline-bots)
+and only for users specified in `tg_id_whitelist.txt`.
+
+Create the bot via [`@BotFather`](https://t.me/BotFather),
+enable inline mode and inline feedback.
+Add the generated token to your environment variables as `TG_API_TOKEN`.
+
+
+To start the bot run:
+```shell
+python -m
+```
