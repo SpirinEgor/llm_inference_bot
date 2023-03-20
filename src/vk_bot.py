@@ -2,6 +2,7 @@ from enum import Enum
 from os import environ
 
 from loguru import logger
+from openai import OpenAIError
 from vk_api import VkApi, ApiError
 from vk_api.longpoll import VkLongPoll, VkEventType
 from vk_api.utils import get_random_id
@@ -19,6 +20,17 @@ class Commands(Enum):
     reset_role = "Сбросить роль на стандартную"
 
 
+_HELP_MESSAGE = """{all_commands}
+
+Максимальное число токенов/сообщений в истории: {tokens_in_history}/{messages_in_history},
+время жизни истории: {max_alive_dialogue} секунд.
+Текущая роль: '{role}'
+Если бот долго не отвечает, вероятно, OpenAI API перегружено, попробуйте позже.
+Если сообщение выводится не до конца, то превышен лимит по токенам, сбросьте историю.
+По всем вопросам: @spirin.egor
+"""
+
+
 def handle_message(message: str, user_id: str, dialogue_tracker: DialogueTracker) -> str:
     if message.startswith("/"):
         command, *argument = message[1:].split(maxsplit=1)
@@ -29,13 +41,9 @@ def handle_message(message: str, user_id: str, dialogue_tracker: DialogueTracker
 
         if command == Commands.help:
             all_commands = [f" - /{it.name} -- {it.value}" for it in Commands]
-            help_msg = (
-                f"Максимальное число токенов/сообщений в истории: {dialogue_tracker.tokens_in_history}/{dialogue_tracker.messages_in_history}, "
-                f"время жизни истории: {dialogue_tracker.max_alive_dialogue} секунд.\n"
-                f"Текущая роль: {dialogue_tracker.get_role(user_id)}"
+            help_msg = _HELP_MESSAGE.format(
+                all_commands="\n".join(all_commands), role=dialogue_tracker.get_role(user_id), **dialogue_tracker.state
             )
-            help_msg += "\nДоступные команды:\n" + "\n".join(all_commands)
-            help_msg += "\nЕсли бот долго не отвечает, вероятно, OpenAI API перегружено, попробуйте позже."
             return help_msg
         elif command == Commands.reset:
             dialogue_tracker.reset_history(user_id)
@@ -49,7 +57,11 @@ def handle_message(message: str, user_id: str, dialogue_tracker: DialogueTracker
             dialogue_tracker.reset_role(user_id)
             return "Роль сброшена на стандартную, история сброшена"
 
-    return dialogue_tracker.on_message(message, user_id)
+    try:
+        return dialogue_tracker.on_message(message, user_id)
+    except OpenAIError as e:
+        logger.warning(f"OpenAI API error: {e}")
+        return f"Error from API: {e.user_message}\nTry to repeat you request later or contact admin 🤗"
 
 
 def main():
