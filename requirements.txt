@@ -1,4 +1,7 @@
 openai~=0.27.0
 loguru~=0.6.0
-vk_api~=11.9.9
 python-telegram-bot~=20.1
+vkbottle~=4.3.1
+google-api-python-client~=2.83.0
+google-auth-httplib2~=0.1.0
+google-auth-oauthlib~=1.0.0

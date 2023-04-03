@@ -1,29 +1,25 @@
-from enum import Enum
 from os import environ
 
 from loguru import logger
 from openai import OpenAIError
-from vk_api import VkApi, ApiError
-from vk_api.longpoll import VkLongPoll, VkEventType
-from vk_api.utils import get_random_id
+from vkbottle import Bot, API
+from vkbottle.bot import Message
+from vkbottle.framework.labeler import BotLabeler
 
 from src.dialogue_tracker import DialogueTracker
+from src.google_sheets_wrapper import GoogleSheetsWrapper
 
-_VK_API_TOKEN = "VK_API_TOKEN"
-_VK_USERS_PREFIX = "vk_"
+_VK_API = API(environ.get("VK_API_TOKEN"))
+_VK_BOT_LABELER = BotLabeler()
+_DIALOG_TRACKER = DialogueTracker()
+_GOOGLE_SHEETS_WRAPPER = GoogleSheetsWrapper()
 
+_HELP_MESSAGE = """Список команд:
+- /help -- Помощь
+- /role <role> -- Установить кастомную роль
+- /reset -- Сбросить роль на стандартную, очистить историю
 
-class Commands(Enum):
-    help = "Помощь"
-    reset = "Сбросить историю"
-    role = "Установить роль"
-    reset_role = "Сбросить роль на стандартную"
-
-
-_HELP_MESSAGE = """{all_commands}
-
-Максимальное число токенов/сообщений в истории: {tokens_in_history}/{messages_in_history},
-время жизни истории: {max_alive_dialogue} секунд.
+Максимальное число сообщений в истории: {messages_in_history}, время жизни истории: {max_alive_dialogue} секунд.
 Текущая роль: '{role}'
 Если бот долго не отвечает, вероятно, OpenAI API перегружено, попробуйте позже.
 Если сообщение выводится не до конца, то превышен лимит по токенам, сбросьте историю.
@@ -31,62 +27,49 @@ _HELP_MESSAGE = """{all_commands}
 """
 
 
-def handle_message(message: str, user_id: str, dialogue_tracker: DialogueTracker) -> str:
-    if message.startswith("/"):
-        command, *argument = message[1:].split(maxsplit=1)
-        try:
-            command = Commands[command]
-        except KeyError:
-            return "Неизвестная команда, попробуйте /help"
+@_VK_BOT_LABELER.message(command="help")
+async def help_message(message: Message):
+    user_id = message.from_id
+    help_msg = _HELP_MESSAGE.format(role=_DIALOG_TRACKER.get_role(user_id), **_DIALOG_TRACKER.config)
+    await message.answer(help_msg)
 
-        if command == Commands.help:
-            all_commands = [f" - /{it.name} -- {it.value}" for it in Commands]
-            help_msg = _HELP_MESSAGE.format(
-                all_commands="\n".join(all_commands), role=dialogue_tracker.get_role(user_id), **dialogue_tracker.state
-            )
-            return help_msg
-        elif command == Commands.reset:
-            dialogue_tracker.reset_history(user_id)
-            return "История диалога сброшена"
-        elif command == Commands.role:
-            if not argument:
-                return "Необходимо указать роль: /role <role>"
-            dialogue_tracker.set_role(user_id, argument[0])
-            return "Роль установлена, история сброшена"
-        elif command == Commands.reset_role:
-            dialogue_tracker.reset_role(user_id)
-            return "Роль сброшена на стандартную, история сброшена"
 
+@_VK_BOT_LABELER.message(command=("role", 1))
+async def set_role(message: Message, args: tuple[str]):
+    user_id = message.from_id
+    _DIALOG_TRACKER.set_role(user_id, args[0])
+    await message.answer("Роль установлена, история сброшена")
+
+
+@_VK_BOT_LABELER.message(command="reset")
+async def reset(message: Message):
+    user_id = message.from_id
+    _DIALOG_TRACKER.reset(user_id)
+    await message.answer("Роль сброшена на стандартную, история сброшена")
+
+
+@_VK_BOT_LABELER.message()
+async def handle_message(message: Message):
+    user_id = message.from_id
     try:
-        return dialogue_tracker.on_message(message, user_id)
+        answer, total_tokens = await _DIALOG_TRACKER.on_message(message.text, user_id)
+        user_info = (await _VK_API.users.get(user_id))[0]
+        user_name = f"{user_info.last_name} {user_info.first_name}"
+        _GOOGLE_SHEETS_WRAPPER.increase_user_usage(user_id, user_name, total_tokens)
     except OpenAIError as e:
         logger.warning(f"OpenAI API error: {e}")
-        return f"Error from API: {e.user_message}\nTry to repeat you request later or contact admin 🤗"
+        answer = "API Error: try to repeat you request later or contact @spirin.egor 🤗"
+    except Exception as e:
+        logger.error(e)
+        answer = "Something went wrong: try to repeat you request later or contact @spirin.egor 🤗"
+    await message.answer(answer)
 
 
 def main():
+    logger.disable("vkbottle")
     logger.info(f"Starting VK bot")
-    token = environ.get(_VK_API_TOKEN)
-    vk_session = VkApi(token=token)
-    vk_api = vk_session.get_api()
-    vk_longpoll = VkLongPoll(vk_session)
-
-    dialogue_tracker = DialogueTracker()
-
-    logger.info("Start listening server")
-    while True:
-        try:
-            for event in vk_longpoll.listen():
-                if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
-                    response = handle_message(event.text, _VK_USERS_PREFIX + str(event.user_id), dialogue_tracker)
-                    vk_api.messages.send(user_id=event.user_id, message=response, random_id=get_random_id())
-        except KeyboardInterrupt:
-            logger.info(f"Keyboard interrupt received, stop listening server")
-            exit()
-        except ApiError:
-            logger.info(f"Strange API error occurred, ignore it")
-        except Exception as e:
-            logger.error(e)
+    bot = Bot(api=_VK_API, labeler=_VK_BOT_LABELER)
+    bot.run_forever()
 
 
 if __name__ == "__main__":

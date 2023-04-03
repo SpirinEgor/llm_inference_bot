@@ -84,7 +84,7 @@ class UpdateInlineQuery:
         query = update.chosen_inline_result.query
         user_id = update.chosen_inline_result.from_user.id
 
-        response = self.dialogue_tracker.on_message(query, _TG_USERS_PREFIX + str(user_id))
+        response, _ = await self.dialogue_tracker.on_message(query, _TG_USERS_PREFIX + str(user_id))
         message = MESSAGE_TEMPLATE.format(escape(query), escape(response))
         await context.bot.editMessageText(message, inline_message_id=inline_message_id, parse_mode=ParseMode.HTML)
 

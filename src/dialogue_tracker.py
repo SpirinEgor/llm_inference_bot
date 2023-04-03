@@ -44,26 +44,31 @@ class Dialogue:
 class DialogueTracker:
 
     _OPENAI_API_KEY = "OPENAI_API_KEY"
-    _MODEL_NAME = "gpt-3.5-turbo-0301"
+    _MODEL_NAME = "gpt-3.5-turbo"
+    _MODEL_CONTEXT_SAFE_SIZE = 4_050
     DEFAULT_ROLE = "You are a helpful assistant who always response in russian language."
 
     TOP_P = 0.9
 
-    def __init__(
-        self, tokens_in_history: int = 4_096, seconds_to_reset: float = 60 * 60, messages_in_history: int = None
-    ):
+    def __init__(self, seconds_to_reset: float = 60 * 60, messages_in_history: int = None):
         logger.info(
             f"Initializing ChatGPT based on '{self._MODEL_NAME}' model and nucleus sampling {self.TOP_P}. "
-            f"Max tokens per history: {tokens_in_history}, seconds to clear history: {seconds_to_reset}, max messages per history: {messages_in_history}"
+            f"Seconds to clear history: {seconds_to_reset}, max messages per history: {messages_in_history}"
         )
         openai.api_key = getenv(self._OPENAI_API_KEY)
 
         self._dialogue_history: dict[str, Dialogue] = {}
-        self.tokens_in_history = tokens_in_history
         self.max_alive_dialogue = seconds_to_reset
         self.messages_in_history = messages_in_history
 
         self._custom_roles: dict[str, str] = {}
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {
+            "messages_in_history": self.messages_in_history,
+            "max_alive_dialogue": self.max_alive_dialogue,
+        }
 
     def _validate_user_dialogue(self, user_id: str) -> bool:
         if user_id not in self._dialogue_history:
@@ -80,15 +85,7 @@ class DialogueTracker:
 
         return True
 
-    @property
-    def state(self) -> dict[str, Any]:
-        return {
-            "tokens_in_history": self.tokens_in_history,
-            "messages_in_history": self.messages_in_history,
-            "max_alive_dialogue": self.max_alive_dialogue,
-        }
-
-    def on_message(self, user_message: str, user_id: str) -> str:
+    def _build_completion(self, user_message: str, user_id: str) -> list[dict]:
         if not self._validate_user_dialogue(user_id):
             if user_id in self._dialogue_history:
                 del self._dialogue_history[user_id]
@@ -96,7 +93,7 @@ class DialogueTracker:
 
         dialogue = self._dialogue_history[user_id]
 
-        while dialogue.total_tokens > self.tokens_in_history:
+        while dialogue.total_tokens > self._MODEL_CONTEXT_SAFE_SIZE:
             dialogue.pop()
 
         if self.messages_in_history is not None:
@@ -109,33 +106,33 @@ class DialogueTracker:
             messages.append({"role": message_type.value, "content": message})
         messages.append({"role": MessageType.USER.value, "content": user_message})
 
-        response = openai.ChatCompletion.create(model=self._MODEL_NAME, messages=messages, top_p=self.TOP_P)
+        return messages
+
+    async def on_message(self, user_message: str, user_id: str) -> tuple[str, int]:
+        messages = self._build_completion(user_message, user_id)
+
+        response = await openai.ChatCompletion.acreate(model=self._MODEL_NAME, messages=messages, top_p=self.TOP_P)
+
         answer = response["choices"][0]["message"]["content"]
-        prompt_tokens, completion_tokens = response["usage"]["prompt_tokens"], response["usage"]["completion_tokens"]
+        prompt, completion = response["usage"]["prompt_tokens"], response["usage"]["completion_tokens"]
+        total = prompt + completion
+        logger.info(f"[User '{user_id}'] prompt: {prompt}, completion: {completion}, total: {total}")
 
-        logger.info(
-            f"[User '{user_id}'] prompt: {prompt_tokens}, "
-            f"completion: {completion_tokens}, total: {prompt_tokens + completion_tokens}"
-        )
+        self._dialogue_history[user_id].update(user_message, answer, prompt, completion)
+        return answer, total
 
-        dialogue.update(user_message, answer, prompt_tokens, completion_tokens)
-        return answer
-
-    def reset_history(self, user_id: str):
+    def reset(self, user_id: str):
         logger.info(f"Resetting history for user '{user_id}'")
         if user_id in self._dialogue_history:
             del self._dialogue_history[user_id]
-
-    def set_role(self, user_id: str, role: str):
-        logger.info(f"Setting role for user '{user_id}': '{role}'")
-        self._custom_roles[user_id] = role
-        self.reset_history(role)
-
-    def reset_role(self, user_id: str):
         logger.info(f"Resetting role for user '{user_id}'")
         if user_id in self._custom_roles:
             del self._custom_roles[user_id]
-            self.reset_history(user_id)
+
+    def set_role(self, user_id: str, role: str):
+        self.reset(user_id)
+        logger.info(f"Setting role for user '{user_id}': '{role}'")
+        self._custom_roles[user_id] = role
 
     def get_role(self, user_id: str) -> str:
         return self._custom_roles.get(user_id, self.DEFAULT_ROLE)
