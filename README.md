@@ -21,6 +21,9 @@ python -m src.vk_bot
 
 Use `/help` to see the list of available commands.
 
+VK Bot also log all statistic about usage to Google Sheets.
+Follow [documentation](https://developers.google.com/sheets/api/quickstart/python) to set up API.
+
 ## Telegram bot
 
 Telegram bot only works in [inline mode](https://telegram.org/blog/inline-bots)
@@ -33,5 +36,5 @@ Add the generated token to your environment variables as `TG_API_TOKEN`.
 
 To start the bot run:
 ```shell
-python -m
+python -m src.telegram_bot
 ```
