@@ -34,13 +34,6 @@ async def help_message(message: Message):
     await message.answer(help_msg)
 
 
-@_VK_BOT_LABELER.message(command=("role", 1))
-async def set_role(message: Message, args: tuple[str]):
-    user_id = message.from_id
-    _DIALOG_TRACKER.set_role(user_id, args[0])
-    await message.answer("Роль установлена, история сброшена")
-
-
 @_VK_BOT_LABELER.message(command="reset")
 async def reset(message: Message):
     user_id = message.from_id
@@ -51,6 +44,16 @@ async def reset(message: Message):
 @_VK_BOT_LABELER.message()
 async def handle_message(message: Message):
     user_id = message.from_id
+    text = message.text
+
+    if text.startswith("/role"):
+        command, argument = text.split(maxsplit=1)
+        if not argument:
+            await message.answer("Необходимо указать роль: /role <role>")
+        _DIALOG_TRACKER.set_role(user_id, argument)
+        await message.answer("Роль установлена, история сброшена")
+        return
+
     try:
         answer, total_tokens = await _DIALOG_TRACKER.on_message(message.text, user_id)
         user_info = (await _VK_API.users.get(user_id))[0]
