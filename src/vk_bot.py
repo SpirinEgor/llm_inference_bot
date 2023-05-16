@@ -12,7 +12,15 @@ from src.google_sheets_wrapper import GoogleSheetsWrapper
 _VK_API = API(environ.get("VK_API_TOKEN"))
 _VK_BOT_LABELER = BotLabeler()
 _DIALOG_TRACKER = DialogueTracker()
-_GOOGLE_SHEETS_WRAPPER = GoogleSheetsWrapper()
+
+_google_spreadsheet_id = environ.get("GOOGLE_SPREADSHEET_ID", None)
+if _google_spreadsheet_id is not None:
+    logger.info(f"Using Google Sheets to track usage")
+    _GOOGLE_SHEETS_WRAPPER = GoogleSheetsWrapper(_google_spreadsheet_id)
+else:
+    logger.info(f"No usage tracking")
+    _GOOGLE_SHEETS_WRAPPER = None
+
 
 _HELP_MESSAGE = """Список команд:
 - /help -- Помощь
@@ -25,6 +33,8 @@ _HELP_MESSAGE = """Список команд:
 Если сообщение выводится не до конца, то превышен лимит по токенам, сбросьте историю.
 По всем вопросам: @spirin.egor
 """
+
+_ERROR_MESSAGE = "Что-то пошло не так 🫠. Попробуйте сбросить историю с помощью `\\reset` или напишите @spirin.egor 🤗!"
 
 
 @_VK_BOT_LABELER.message(command="help")
@@ -58,13 +68,15 @@ async def handle_message(message: Message):
         answer, total_tokens = await _DIALOG_TRACKER.on_message(message.text, user_id)
         user_info = (await _VK_API.users.get(user_id))[0]
         user_name = f"{user_info.last_name} {user_info.first_name}"
-        _GOOGLE_SHEETS_WRAPPER.increase_user_usage(user_id, user_name, total_tokens)
+
+        if _GOOGLE_SHEETS_WRAPPER is not None:
+            _GOOGLE_SHEETS_WRAPPER.increase_user_usage(user_id, user_name, total_tokens)
     except OpenAIError as e:
         logger.warning(f"OpenAI API error: {e}")
-        answer = "API Error: try to repeat you request later or contact @spirin.egor 🤗"
+        answer = _ERROR_MESSAGE
     except Exception as e:
         logger.error(e)
-        answer = "Something went wrong: try to repeat you request later or contact @spirin.egor 🤗"
+        answer = _ERROR_MESSAGE
     await message.answer(answer)
 
 

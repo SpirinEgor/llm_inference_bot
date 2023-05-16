@@ -21,8 +21,10 @@ python -m src.vk_bot
 
 Use `/help` to see the list of available commands.
 
-VK Bot also log all statistic about usage to Google Sheets.
+VK Bot also can log all usage statistic to Google Sheets.
 Follow [documentation](https://developers.google.com/sheets/api/quickstart/python) to set up API.
+You will need to install additional dependencies from [`requirements-google.txt`](requirements-google.txt),
+place the file `credentials.json` in the root of the project, and set the environment variable `GOOGLE_SPREADSHEET_ID`.
 
 ## Telegram bot
 

@@ -17,10 +17,10 @@ class GoogleSheetsWrapper:
     TOKEN_FILE = "token.json"
     CREDENTIALS_FILE = "credentials.json"
 
-    SPREADSHEET_ID = "1dVfXYoaOCTCi3XVS8SiAQhMj4q_d04zzhu3jrBE1RmU"
     HEADER_VALUES = ["Id", "Name", "Last Usage", "Requests", "Total Tokens"]
 
-    def __init__(self):
+    def __init__(self, spreadsheet_id: str):
+        self.spreadsheet_id = spreadsheet_id
         creds = None
         if exists(self.TOKEN_FILE):
             creds = Credentials.from_authorized_user_file(self.TOKEN_FILE, self.SCOPES)
@@ -38,14 +38,14 @@ class GoogleSheetsWrapper:
 
     def add_sheet(self, sheet_name: str):
         request_body = {"requests": [{"addSheet": {"properties": {"title": sheet_name}}}]}
-        self._sheet.batchUpdate(spreadsheetId=self.SPREADSHEET_ID, body=request_body).execute()
+        self._sheet.batchUpdate(spreadsheetId=self.spreadsheet_id, body=request_body).execute()
         values = {"values": [self.HEADER_VALUES]}
         self._sheet.values().update(
-            spreadsheetId=self.SPREADSHEET_ID, range=f"{sheet_name}!A1:E1", body=values, valueInputOption="RAW"
+            spreadsheetId=self.spreadsheet_id, range=f"{sheet_name}!A1:E1", body=values, valueInputOption="RAW"
         ).execute()
 
     def get_all_sheets(self):
-        sheet_metadata = self._sheet.get(spreadsheetId=self.SPREADSHEET_ID).execute()
+        sheet_metadata = self._sheet.get(spreadsheetId=self.spreadsheet_id).execute()
         sheets = sheet_metadata.get("sheets", [])
         titles = [sheet.get("properties", {}).get("title", "[UNK]") for sheet in sheets]
         return titles
@@ -56,7 +56,7 @@ class GoogleSheetsWrapper:
             self.add_sheet(current_month)
 
         cells_range = f"{current_month}!A1:E"
-        result = self._sheet.values().get(spreadsheetId=self.SPREADSHEET_ID, range=cells_range).execute()
+        result = self._sheet.values().get(spreadsheetId=self.spreadsheet_id, range=cells_range).execute()
         values = [UserData(*it) for it in result.get("values", [])]
 
         return values, current_month
@@ -65,7 +65,7 @@ class GoogleSheetsWrapper:
         values = {"values": [user_data]}
         add_range = f"{sheet_name}!A{row_id}:E{row_id}"
         self._sheet.values().update(
-            spreadsheetId=self.SPREADSHEET_ID, range=add_range, body=values, valueInputOption="RAW"
+            spreadsheetId=self.spreadsheet_id, range=add_range, body=values, valueInputOption="RAW"
         ).execute()
 
     def increase_user_usage(self, user_id: str | int, user_name: str, add_usage: int):
