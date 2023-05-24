@@ -34,7 +34,13 @@ _HELP_MESSAGE = """Список команд:
 По всем вопросам: @spirin.egor
 """
 
-_ERROR_MESSAGE = "Что-то пошло не так 🫠. Попробуйте сбросить историю с помощью `\\reset` или напишите @spirin.egor 🤗!"
+_OPENAI_ERROR_MESSAGE = (
+    "Какая-то ошибка на сервере OpenAI, скорее всего перегружен другими запросами 🫠. "
+    "Повторите запрос позже или попробуйте сбросить историю с помощью `/reset`"
+)
+_SYSTEM_ERROR_MESSAGE = (
+    "Что-то пошло не так 🫠. Попробуйте сбросить историю с помощью `/reset` или напишите @spirin.egor 🤗!"
+)
 
 
 @_VK_BOT_LABELER.message(command="help")
@@ -73,10 +79,10 @@ async def handle_message(message: Message):
             _GOOGLE_SHEETS_WRAPPER.increase_user_usage(user_id, user_name, total_tokens)
     except OpenAIError as e:
         logger.warning(f"OpenAI API error: {e}")
-        answer = _ERROR_MESSAGE
+        answer = _OPENAI_ERROR_MESSAGE
     except Exception as e:
         logger.error(e)
-        answer = _ERROR_MESSAGE
+        answer = _SYSTEM_ERROR_MESSAGE
     await message.answer(answer)
 
 
