@@ -42,10 +42,9 @@ class Dialogue:
 
 
 class DialogueTracker:
-
     _OPENAI_API_KEY = "OPENAI_API_KEY"
-    _MODEL_NAME = "gpt-3.5-turbo"
-    _MODEL_CONTEXT_SAFE_SIZE = 4_050
+    _MODEL_NAME = "gpt-4-1106-preview"
+    _MODEL_CONTEXT_SAFE_SIZE = 128_000
     DEFAULT_ROLE = "You are a helpful assistant who always response in russian language."
 
     TOP_P = 0.9
