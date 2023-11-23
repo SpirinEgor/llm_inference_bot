@@ -54,7 +54,8 @@ class DialogueTracker:
             f"Initializing ChatGPT based on '{self._MODEL_NAME}' model and nucleus sampling {self.TOP_P}. "
             f"Seconds to clear history: {seconds_to_reset}, max messages per history: {messages_in_history}"
         )
-        openai.api_key = getenv(self._OPENAI_API_KEY)
+        openai_api_key = getenv(self._OPENAI_API_KEY)
+        self._client = openai.AsyncOpenAI(api_key=openai_api_key)
 
         self._dialogue_history: dict[str, Dialogue] = {}
         self.max_alive_dialogue = seconds_to_reset
@@ -110,10 +111,12 @@ class DialogueTracker:
     async def on_message(self, user_message: str, user_id: str) -> tuple[str, int]:
         messages = self._build_completion(user_message, user_id)
 
-        response = await openai.ChatCompletion.acreate(model=self._MODEL_NAME, messages=messages, top_p=self.TOP_P)
+        response = await self._client.chat.completions.create(
+            messages=messages, model=self._MODEL_NAME, top_p=self.TOP_P
+        )
 
-        answer = response["choices"][0]["message"]["content"]
-        prompt, completion = response["usage"]["prompt_tokens"], response["usage"]["completion_tokens"]
+        answer = response.choices[0].message.content
+        prompt, completion = response.usage.prompt_tokens, response.usage.completion_tokens
         total = prompt + completion
         logger.info(f"[User '{user_id}'] prompt: {prompt}, completion: {completion}, total: {total}")
 
